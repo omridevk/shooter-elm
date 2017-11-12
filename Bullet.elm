@@ -15,7 +15,7 @@ type alias Bullet =
 
 initBullet : Ship -> Bullet
 initBullet ship =
-    Bullet (ship.x + 50 / 2) ship.y -0.3
+    Bullet (ship.x + (toFloat ship.width) / 2) ship.y -0.3
 
 
 render bullet =

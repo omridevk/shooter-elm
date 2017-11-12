@@ -8,13 +8,20 @@ import Tuple exposing (first, second)
 type alias Ship =
     { x: Float
     , y: Float
+    , width: Int
+    , height: Int
     , velocity: (Float, Float)
     }
 
 
 initShip : Ship
 initShip =
-    Ship 0 0 (0, 0)
+    { x = 0
+    , y = 0
+    , height = 30
+    , width = 30
+    , velocity = (0, 0)
+    }
 
 updateVelocity : Ship -> (Float, Float) -> Ship
 updateVelocity ship (vx, vy) =
@@ -35,11 +42,11 @@ updateVx ship vx =
 
 
 render ship =
-    let (shipX, shipY) =
-            (toString ship.x, toString ship.y)
+    let (shipX, shipY, width, height) =
+            (toString ship.x, toString ship.y, toString ship.width, toString ship.height)
         shipStyle =
-            style [("width", "50px")
-                  , ("height", "50px")
+            style [("width", width ++ "px")
+                  , ("height", height ++ "px")
                   , ("transform", "translateX(" ++ shipX ++ "px) translateY(" ++ shipY ++ "px)")
                   ]
         imgStyle =

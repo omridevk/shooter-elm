@@ -10,8 +10,8 @@ validateShipX (game, cmd) =
         (x, vx) =
             if game.ship.x < 0 then
                 (0, 0)
-            else if game.ship.x + 50 > toFloat width then
-                (toFloat (width - 50), 0)
+            else if game.ship.x + (toFloat game.ship.width) > toFloat width then
+                (toFloat (width - game.ship.width), 0)
             else (game.ship.x, first game.ship.velocity)
         newShip = {ship | x = x}
     in
@@ -23,8 +23,8 @@ validateShipY (game, cmd) =
         (y, vy) =
             if game.ship.y < 0 then
                 (0, 0)
-            else if game.ship.y + 50 > toFloat height then
-                (toFloat (height - 50), 0)
+            else if game.ship.y + toFloat game.ship.height > toFloat height then
+                (toFloat (height - game.ship.height), 0)
             else (game.ship.y, second game.ship.velocity)
         newShip = {ship | y = y}
     in
