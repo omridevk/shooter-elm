@@ -1,9 +1,11 @@
 import AnimationFrame
 import Html exposing (..)
 import Html.Attributes exposing (class, src, style)
-import Keyboard
+import Keyboard exposing (KeyCode)
+import Keyboard.Extra exposing (Key(..))
 import Task
 import Time exposing (Time)
+import Tuple exposing (first)
 import Window
 
 
@@ -20,13 +22,17 @@ main =
 type alias Game =
     { dimensions: Window.Size
     , ship: Ship
+    , pressedKeys: List Key
     , tick: Time
     , isDead: Bool
     }
 
+
+
 type alias Ship =
-    { x: Int
-    , y: Int
+    { x: Float
+    , y: Float
+    , velocity: (Float, Float)
     }
 
 type Keys
@@ -38,18 +44,21 @@ type Keys
     | Space
 
 type Msg
-    = KeyPressed Keys
+    = KeyDown Keys
+    | KeyUp Keys
+    | KeyboardMsg Keyboard.Extra.Msg
     | SizeUpdated Window.Size
     | Tick Time
 
 initShip : Ship
 initShip =
-    Ship 0 0
+    Ship 0 0 (0, 0)
 
 init: Game
 init =
     { dimensions = Window.Size 200 400
     , ship = initShip
+    , pressedKeys = []
     , tick = 0
     , isDead = False
     }
@@ -60,85 +69,135 @@ subscriptions model =
     let ticks =
             AnimationFrame.diffs Tick
     in
-        Sub.batch [ keysChanged, windowDimensionsChanged, ticks ]
+        Sub.batch [ keysDown, keysUp, windowDimensionsChanged, Sub.map KeyboardMsg Keyboard.Extra.subscriptions ]
 
 windowDimensionsChanged : Sub Msg
 windowDimensionsChanged =
     Window.resizes SizeUpdated
 
 
-keysChanged : Sub Msg
-keysChanged =
-    Keyboard.downs toArrowChanged
+keysUp : Sub Msg
+keysUp =
+    Keyboard.ups (keysCodeMap False)
 
-toArrowChanged : Keyboard.KeyCode -> Msg
-toArrowChanged code =
+keysDown : Sub Msg
+keysDown =
+    Keyboard.downs (keysCodeMap True)
+
+keysCodeMap : Bool -> Keyboard.KeyCode -> Msg
+keysCodeMap downs code =
     case code of
         32 ->
-            KeyPressed Space
+            if downs then KeyDown Space else KeyUp Space
 
         37 ->
-            KeyPressed LeftKey
+            if downs then KeyDown LeftKey else KeyUp LeftKey
 
         38 ->
-            KeyPressed UpKey
+            if downs then KeyDown UpKey else KeyUp UpKey
 
         39 ->
-            KeyPressed RightKey
-
+            if downs then KeyDown RightKey else KeyUp RightKey
         40 ->
-            KeyPressed DownKey
+            if downs then KeyDown DownKey else KeyUp DownKey
 
         default ->
-            KeyPressed NoKey
-
+            if downs then KeyDown NoKey else KeyUp NoKey
 
 -- update
 
 update: Msg -> Game -> (Game, Cmd msg)
 update msg game =
-    case msg of
-        KeyPressed key ->
-            (moveShip game key, Cmd.none)
-        SizeUpdated dimensions ->
-            (game, Cmd.none)
-        Tick time ->
-            updateGame game
+    let {ship} = game
+    in
+        case msg of
+            KeyboardMsg keyMsg ->
+                ( { game
+                    | pressedKeys = Keyboard.Extra.update keyMsg game.pressedKeys
+                  }
+                , Cmd.none)
+            KeyDown key ->
+                (keyDown game key, Cmd.none)
+            KeyUp key ->
+                (keyUp game key, Cmd.none)
+            SizeUpdated dimensions ->
+                (game, Cmd.none)
+            Tick time ->
+                updateGame time game
 
+keyUp: Game -> Keys -> Game
+keyUp game key =
+    case key of
+        UpKey ->
+            updateVy game 0
+        DownKey ->
+            updateVy game 0
+        LeftKey ->
+            updateVx game 0
+        RightKey ->
+            updateVx game 0
+        _ ->
+            game
 
-updateGame game =
+keyDown : Game -> Keys -> Game
+keyDown game key =
+     case key of
+        UpKey ->
+            updateVy game -0.3
+        DownKey ->
+            updateVy game 0.3
+        LeftKey ->
+            updateVx game -0.3
+        RightKey ->
+            updateVx game 0.3
+        _ ->
+            game
+
+updateVy game vy =
+    let (vx, _) = game.ship.velocity
+    in
+        updateVelocity game (vx, vy)
+
+updateVx game vx =
+    let (_, vy) = game.ship.velocity
+    in
+        updateVelocity game (vx, vy)
+
+updateVelocity : Game -> (Float, Float) -> Game
+updateVelocity game (vx, vy) =
+    let {ship} =
+            game
+    in
+        {game | ship = {ship | velocity = (vx, vy)}}
+
+updateGame dt game =
     (game, Cmd.none)
+        |> applyPhysics dt
         |> validateX
 
+applyPhysics dt (game, cmd) =
+    let {ship} = game
+        (vx, vy) = ship.velocity
+        newShip =
+            {ship | x = ship.x + dt * vx
+            , y = ship.y + dt * vy
+            }
+    in
+        ({game | ship = newShip}, cmd)
+
 validateX (game, cmd) =
-    let x =
+    let {width} = game.dimensions
+        (x, vx) =
             if game.ship.x < 0 then
-                0
-            else if game.ship.x > game.dimensions.width then
-                game.dimensions.width
-            else game.ship.x
+                (0, 0)
+            else if game.ship.x + 50 > toFloat game.dimensions.width then
+                (toFloat (game.dimensions.width - 50), 0)
+            else (game.ship.x, first game.ship.velocity)
+        ship = updateShip game.ship x game.ship.y
     in
-        ({game | ship = updateShip game.ship x game.ship.y}, Cmd.none)
+        (updateVx {game | ship = ship} vx, Cmd.none)
 
-
-moveShip: Game -> Keys -> Game
-moveShip game key =
-    let (x, y) =
-            case key of
-                LeftKey ->
-                    (game.ship.x - 1, game.ship.y)
-                RightKey ->
-                    (game.ship.x + 1, game.ship.y)
-                UpKey ->
-                    (game.ship.x, game.ship.y - 1)
-                DownKey ->
-                    (game.ship.x, game.ship.y + 1)
-                _ ->
-                    (game.ship.x, game.ship.y)
-    in
-        ({game | ship = updateShip game.ship x y})
-
-updateShip: Ship -> Int -> Int -> Ship
+updateShip: Ship -> Float -> Float -> Ship
 updateShip ship x y =
     {ship | x = x
     , y = y
@@ -165,9 +224,11 @@ renderGame game =
     let (gameWidth, gameHeight) =
             (toString game.dimensions.width, toString game.dimensions.height)
         gameStyle =
-            style [ ("width", gameWidth ++ "px")
-                  , ("height", gameHeight ++ "px")
-                  , ("margin", "auto")]
+            style
+                [ ("width", gameWidth ++ "px")
+                , ("background-color", "rgba(0, 0, 0, 0.07)")
+                , ("height", gameHeight ++ "px")
+                , ("margin", "auto")]
     in
         div [ class "game", gameStyle ] [
             renderShip game.ship
