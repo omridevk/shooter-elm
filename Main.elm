@@ -6,7 +6,6 @@ import Html.Attributes exposing (class, src, style)
 import Keyboard exposing (KeyCode)
 import Keyboard.Extra exposing (Key(..))
 import List exposing (member, map)
-import Render exposing (render)
 import Ship exposing (Ship, initShip, updateVelocity)
 import Task
 import Time exposing (Time)
@@ -104,3 +103,30 @@ applyPhysics dt (game, cmd) =
         bullets = map (\bullet -> {bullet | y = bullet.y + dt * bullet.velocity}) game.bullets
     in
         ({game | ship = newShip, bullets = bullets}, cmd)
+
+
+-- view
+
+render game =
+    div []
+        [ renderDebug game
+        , Game.render game
+        ]
+
+
+containerStyle =
+    style [ ("max-width", "400px")
+          , ("max-height", "400px")
+          , ("overflow-x", "auto")
+          , ("position", "absolute")
+          ]
+
+renderDebug game =
+    div [containerStyle]
+        [ renderFps game
+        , Bullet.debug game.bullets
+        , Ship.debug game.ship
+        ]
+
+renderFps game =
+    div [] [text ("fps: " ++ (toString (1 / toFloat (round game.tick) * 1000)))]

@@ -1,5 +1,7 @@
-module Ship exposing (updateVy, updateVx, updateVelocity, Ship, initShip)
+module Ship exposing (updateVy, updateVx, updateVelocity, Ship, initShip, render, debug)
 
+import Html exposing (div, img, text)
+import Html.Attributes exposing (class, src, style)
 import Keyboard.Extra
 import Tuple exposing (first, second)
 
@@ -30,3 +32,22 @@ updateVx ship vx =
     let (_, vy) = ship.velocity
     in
         updateVelocity ship (vx, vy)
+
+
+render ship =
+    let (shipX, shipY) =
+            (toString ship.x, toString ship.y)
+        shipStyle =
+            style [("width", "50px")
+                  , ("height", "50px")
+                  , ("transform", "translateX(" ++ shipX ++ "px) translateY(" ++ shipY ++ "px)")
+                  ]
+        imgStyle =
+            style [("max-width", "100%")]
+    in
+        div [ class "ship", shipStyle] [
+            img [ src "./images/fighter.png", imgStyle] []
+        ]
+
+debug ship =
+    div [] [ text (toString ship)]
