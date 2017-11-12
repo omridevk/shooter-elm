@@ -1,11 +1,12 @@
 import AnimationFrame
-import Html exposing (..)
+import Html exposing (div, img, li, text, ul)
 import Html.Attributes exposing (class, src, style)
 import Keyboard exposing (KeyCode)
 import Keyboard.Extra exposing (Key(..))
+import List exposing (member, map)
 import Task
 import Time exposing (Time)
-import Tuple exposing (first)
+import Tuple exposing (first, second)
 import Window
 
 
@@ -22,12 +23,17 @@ main =
 type alias Game =
     { dimensions: Window.Size
     , ship: Ship
+    , bullets: List Bullet
     , pressedKeys: List Key
     , tick: Time
     , isDead: Bool
     }
 
-
+type alias Bullet =
+    { x: Float
+    , y: Float
+    , velocity: Float
+    }
 
 type alias Ship =
     { x: Float
@@ -35,18 +41,9 @@ type alias Ship =
     , velocity: (Float, Float)
     }
 
-type Keys
-    = NoKey
-    | LeftKey
-    | RightKey
-    | UpKey
-    | DownKey
-    | Space
 
 type Msg
-    = KeyDown Keys
-    | KeyUp Keys
-    | KeyboardMsg Keyboard.Extra.Msg
+    = KeyboardMsg Keyboard.Extra.Msg
     | SizeUpdated Window.Size
     | Tick Time
 
@@ -58,6 +55,7 @@ init: Game
 init =
     { dimensions = Window.Size 200 400
     , ship = initShip
+    , bullets = []
     , pressedKeys = []
     , tick = 0
     , isDead = False
@@ -69,40 +67,12 @@ subscriptions model =
     let ticks =
             AnimationFrame.diffs Tick
     in
-        Sub.batch [ keysDown, keysUp, windowDimensionsChanged, Sub.map KeyboardMsg Keyboard.Extra.subscriptions ]
+        Sub.batch [ windowDimensionsChanged, Sub.map KeyboardMsg Keyboard.Extra.subscriptions, ticks ]
 
 windowDimensionsChanged : Sub Msg
 windowDimensionsChanged =
     Window.resizes SizeUpdated
 
-
-keysUp : Sub Msg
-keysUp =
-    Keyboard.ups (keysCodeMap False)
-
-keysDown : Sub Msg
-keysDown =
-    Keyboard.downs (keysCodeMap True)
-
-keysCodeMap : Bool -> Keyboard.KeyCode -> Msg
-keysCodeMap downs code =
-    case code of
-        32 ->
-            if downs then KeyDown Space else KeyUp Space
-
-        37 ->
-            if downs then KeyDown LeftKey else KeyUp LeftKey
-
-        38 ->
-            if downs then KeyDown UpKey else KeyUp UpKey
-
-        39 ->
-            if downs then KeyDown RightKey else KeyUp RightKey
-        40 ->
-            if downs then KeyDown DownKey else KeyUp DownKey
-
-        default ->
-            if downs then KeyDown NoKey else KeyUp NoKey
 
 -- update
 
@@ -116,42 +86,10 @@ update msg game =
                     | pressedKeys = Keyboard.Extra.update keyMsg game.pressedKeys
                   }
                 , Cmd.none)
-            KeyDown key ->
-                (keyDown game key, Cmd.none)
-            KeyUp key ->
-                (keyUp game key, Cmd.none)
             SizeUpdated dimensions ->
                 (game, Cmd.none)
             Tick time ->
                 updateGame time game
-
-keyUp: Game -> Keys -> Game
-keyUp game key =
-    case key of
-        UpKey ->
-            updateVy game 0
-        DownKey ->
-            updateVy game 0
-        LeftKey ->
-            updateVx game 0
-        RightKey ->
-            updateVx game 0
-        _ ->
-            game
-
-keyDown : Game -> Keys -> Game
-keyDown game key =
-     case key of
-        UpKey ->
-            updateVy game -0.3
-        DownKey ->
-            updateVy game 0.3
-        LeftKey ->
-            updateVx game -0.3
-        RightKey ->
-            updateVx game 0.3
-        _ ->
-            game
 
 updateVy game vy =
     let (vx, _) = game.ship.velocity
@@ -172,8 +110,41 @@ updateVelocity game (vx, vy) =
 
 updateGame dt game =
     (game, Cmd.none)
+        |> updateShip
         |> applyPhysics dt
         |> validateX
+        |> validateY
+        |> checkFired
+        |> checkBullets
+
+initBullet : Ship -> Bullet
+initBullet ship =
+    Bullet ship.x ship.y -0.3
+
+
+checkBullets (game, cmd) =
+    ({game | bullets = List.filter (validateBullet game) game.bullets}, cmd)
+
+validateBullet : Game -> Bullet -> Bool
+validateBullet game bullet =
+    let {dimensions} = game
+    in
+        if bullet.y < 0 then False else True
+
+checkFired (game, cmd) =
+    let bullets =
+            if member Space game.pressedKeys then game.bullets ++ [initBullet game.ship] else game.bullets
+    in
+        ({game | bullets = bullets}, cmd)
+
+updateShip (game, cmd) =
+    let arrows =
+            Keyboard.Extra.arrows game.pressedKeys
+        (x, y) =
+            (toFloat arrows.x, toFloat arrows.y)
+    in
+        (updateVelocity game (x * 0.3, y * -0.3), cmd)
+
 
 applyPhysics dt (game, cmd) =
     let {ship} = game
@@ -182,27 +153,35 @@ applyPhysics dt (game, cmd) =
             {ship | x = ship.x + dt * vx
             , y = ship.y + dt * vy
             }
+        bullets = map (\bullet -> {bullet | y = bullet.y + dt * bullet.velocity}) game.bullets
     in
-        ({game | ship = newShip}, cmd)
+        ({game | ship = newShip, bullets = bullets}, cmd)
 
 validateX (game, cmd) =
     let {width} = game.dimensions
+        {ship} = game
         (x, vx) =
             if game.ship.x < 0 then
                 (0, 0)
-            else if game.ship.x + 50 > toFloat game.dimensions.width then
-                (toFloat (game.dimensions.width - 50), 0)
+            else if game.ship.x + 50 > toFloat width then
+                (toFloat (width - 50), 0)
             else (game.ship.x, first game.ship.velocity)
-        ship = updateShip game.ship x game.ship.y
+        newShip = {ship | x = x}
     in
-        (updateVx {game | ship = ship} vx, Cmd.none)
+        (updateVx {game | ship = newShip} vx, Cmd.none)
 
-updateShip: Ship -> Float -> Float -> Ship
-updateShip ship x y =
-    {ship | x = x
-    , y = y
-    }
-
+validateY (game, cmd) =
+    let {height} = game.dimensions
+        {ship}   = game
+        (y, vy) =
+            if game.ship.y < 0 then
+                (0, 0)
+            else if game.ship.y + 50 > toFloat height then
+                (toFloat (height - 50), 0)
+            else (game.ship.y, second game.ship.velocity)
+        newShip = {ship | y = y}
+    in
+        (updateVy {game | ship = newShip} vy, cmd)
 
 renderShip ship =
     let (shipX, shipY) =
@@ -227,15 +206,57 @@ renderGame game =
             style
                 [ ("width", gameWidth ++ "px")
                 , ("background-color", "rgba(0, 0, 0, 0.07)")
+                , ("position", "relative")
                 , ("height", gameHeight ++ "px")
                 , ("margin", "auto")]
+        ship = [renderShip game.ship]
+        bullets = map renderBullet game.bullets
     in
-        div [ class "game", gameStyle ] [
-            renderShip game.ship
+        div [ class "game", gameStyle ]
+            (ship ++ bullets)
+
+renderBullet bullet =
+    let (y, x) = (toString bullet.y, toString bullet.x)
+        bulletStyle =
+            style
+                [ ("width", "10px")
+                , ("height", "10px")
+                , ("background-color", "red")
+                , ("left", "0")
+                , ("top", "0")
+                , ("bottom", "0")
+                , ("right", "0")
+                , ("transform", "translateY(" ++ y ++ "px) translateX(" ++ x ++ "px")
+                , ("right", "0")
+                , ("position", "absolute")
+                ]
+    in
+        div [ class "bullet", bulletStyle]
+            [ img [] []
+            ]
+
+containerStyle =
+    style [ ("max-width", "400px")
+          , ("max-height", "400px")
+          , ("overflow-x", "auto")
+          , ("position", "absolute")
+          ]
+
+renderDebug game =
+    div [containerStyle]
+        [ renderBulletsDebug game.bullets
+        , renderShipDebug game.ship
         ]
 
+
+renderBulletsDebug bullets =
+    ul [] (List.map (\bullet -> li [] [text (toString bullet)]) bullets )
+
+renderShipDebug ship =
+    div [] [ text (toString ship)]
+
 view game =
-    div [] [
-    text (toString game),
-    renderGame game
-    ]
+    div []
+        [ renderDebug game
+        , renderGame game
+        ]
