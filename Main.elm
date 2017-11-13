@@ -29,17 +29,21 @@ main =
 type Msg
     = KeyboardMsg Keyboard.Extra.Msg
     | SizeUpdated Window.Size
+    | KeyMsg Keyboard.KeyCode
     | Tick Time
 
 
 
 
 subscriptions : Game -> Sub Msg
-subscriptions model =
+subscriptions game =
     let ticks =
             AnimationFrame.diffs Tick
     in
-        Sub.batch [ windowDimensionsChanged, Sub.map KeyboardMsg Keyboard.Extra.subscriptions, ticks ]
+        if game.paused then
+            Sub.batch [Keyboard.downs KeyMsg]
+        else
+            Sub.batch [ windowDimensionsChanged, Sub.map KeyboardMsg Keyboard.Extra.subscriptions, ticks ]
 
 windowDimensionsChanged : Sub Msg
 windowDimensionsChanged =
@@ -60,12 +64,22 @@ update msg game =
                 , Cmd.none)
             SizeUpdated dimensions ->
                 (game, Cmd.none)
+            KeyMsg keyCode ->
+                handlePause game keyCode
             Tick time ->
                 updateGame time game
 
+handlePause game keyCode =
+    case keyCode of
+        80 ->
+            ({game | paused = False, pressedKeys = []}, Cmd.none)
+        _ ->
+            (game, Cmd.none)
+
 updateGame dt game =
     let bullets = isBulletsOutOfBound game.bullets
-        newGame = { game | bullets = bullets}
+        isPaused = List.member CharP game.pressedKeys
+        newGame = { game | bullets = bullets, paused = isPaused}
     in
         (newGame, Cmd.none)
             |> updateTick dt
@@ -76,7 +90,7 @@ updateGame dt game =
             |> checkFired
 
 updateTick dt (game, cmd) =
-    ({game | tick = dt}, cmd)
+    ({game | tick = dt, elapsed = game.elapsed + round dt}, cmd)
 
 
 checkFired (game, cmd) =
@@ -126,7 +140,8 @@ renderDebug game =
         [ renderFps game
         , Bullet.debug game.bullets
         , Ship.debug game.ship
+        , text (toString game)
         ]
 
 renderFps game =
-    div [] [text ("fps: " ++ (toString (1 / toFloat (round game.tick) * 1000)))]
+    div [] [text ("fps: " ++ (toString (round (1 / toFloat (round game.tick) * 1000))))]

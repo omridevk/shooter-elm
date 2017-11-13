@@ -11,6 +11,8 @@ import Window
 type alias Game =
     { dimensions: Window.Size
     , ship: Ship
+    , elapsed: Int
+    , paused: Bool
     , bullets: List Bullet
     , pressedKeys: List Key
     , tick: Time
@@ -18,23 +20,34 @@ type alias Game =
     }
 
 
+dimensions : Window.Size
+dimensions =
+    { width = 200
+    , height = 400
+    }
+
 init: Game
 init =
-    { dimensions = Window.Size 200 400
+    { dimensions = dimensions
     , ship = initShip
+    , paused = False
     , bullets = []
     , pressedKeys = []
     , tick = 0
+    , elapsed = 0
     , isDead = False
     }
 
 render game =
-    let (gameWidth, gameHeight) =
-            (toString game.dimensions.width, toString game.dimensions.height)
+    let (gameWidth, gameHeight, elapsed) =
+            (toString game.dimensions.width, toString game.dimensions.height, toFloat game.elapsed)
+        backgroundPosition = toString (elapsed / 10)
         gameStyle =
             style
                 [ ("width", gameWidth ++ "px")
-                , ("background-color", "rgba(0, 0, 0, 0.07)")
+                , ("background", "url(images/background.png) repeat")
+                , ("backgroundColor", "rgba(0, 0, 0, 0.5)")
+                , ("backgroundPositionY", backgroundPosition ++ "px")
                 , ("position", "relative")
                 , ("height", gameHeight ++ "px")
                 , ("margin", "auto")]
