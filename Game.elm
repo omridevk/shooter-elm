@@ -2,6 +2,7 @@ module Game exposing (Game, init, render)
 
 import Bullet exposing (Bullet)
 import Html exposing (div)
+import Enemy
 import Html.Attributes exposing (class, style)
 import Keyboard.Extra exposing (Key)
 import Ship exposing (Ship, initShip, render)
@@ -13,7 +14,9 @@ type alias Game =
     , ship: Ship
     , elapsed: Int
     , paused: Bool
+    , randomInt: Int
     , bullets: List Bullet
+    , enemies: List Ship
     , pressedKeys: List Key
     , tick: Time
     , isDead: Bool
@@ -30,8 +33,10 @@ init: Game
 init =
     { dimensions = dimensions
     , ship = initShip
+    , enemies = []
     , paused = False
     , bullets = []
+    , randomInt = 0
     , pressedKeys = []
     , tick = 0
     , elapsed = 0
@@ -45,6 +50,7 @@ render game =
         gameStyle =
             style
                 [ ("width", gameWidth ++ "px")
+                , ("overflow", "hidden")
                 , ("background", "url(images/background.png) repeat")
                 , ("backgroundColor", "rgba(0, 0, 0, 0.5)")
                 , ("backgroundPositionY", backgroundPosition ++ "px")
@@ -53,7 +59,9 @@ render game =
                 , ("margin", "auto")]
         ship = Ship.render game.ship
         bullets = List.map Bullet.render game.bullets
+        enemies = List.map Ship.render game.enemies
+
     in
         div [ class "game", gameStyle ]
-            (ship :: bullets)
+            (List.append (ship :: bullets) enemies)
 
